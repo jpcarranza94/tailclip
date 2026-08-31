@@ -71,9 +71,12 @@ Read this before you run tailclip.
 - To remove a device, remove it from the Tailscale admin console. The key of
   that device stops working at once. tailclip needs no revocation list.
 - `serve` refuses to bind a public address. Loopback, RFC1918, `100.64.0.0/10`,
-  and IPv6 `fc00::/7` are allowed. `--allow-public-bind` overrides the refusal.
-  Do not use that flag. tailclip has no authentication, so a public bind gives
-  the clipboard to the internet.
+  and IPv6 `fc00::/7` are allowed. `0.0.0.0` and `::` mean every interface, so
+  the server refuses them too. `--allow-public-bind` overrides the refusal. Do
+  not use that flag on a host with a public address. tailclip has no
+  authentication, so a public bind gives the clipboard to the internet. Inside
+  a container, the flag is correct, because the network namespace is the
+  boundary.
 - The server keeps one clip in RAM. It writes nothing to disk. If a thief takes
   the machine, the clip is gone.
 - The transport is plain HTTP inside the WireGuard tunnel. Tailscale already
@@ -114,6 +117,13 @@ You can drive the whole protocol with `curl`:
 ## Platforms
 
 macOS and Linux are the release targets. Windows compiles, but nobody tests it.
+
+Both targets are tested. The Linux tests run in a Debian container, with a
+virtual X server for the clipboard checks:
+
+    docker run --rm -v "$PWD":/src:ro rust:slim bash -c \
+      "apt-get update -qq && apt-get install -y -qq pkg-config libwayland-dev \
+       && cp -r /src /tmp/tc && cd /tmp/tc && cargo test"
 
 There is no phone client. Android blocks background clipboard reads, so a
 client cannot see a copy that happens in another app. Use `tailclip get` and
@@ -171,7 +181,7 @@ PNG bytes itself, so the `image` crate and its unused decoders stay out.
 
 ## Tests
 
-    cargo test                  # 17 unit tests and 14 end to end tests
+    cargo test                  # 17 unit tests and 17 end to end tests
     cargo test -- --ignored     # also drive the real pasteboard of this host
     tailclip selftest           # the same protocol checks, from the binary
 

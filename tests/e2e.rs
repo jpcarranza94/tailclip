@@ -333,6 +333,20 @@ fn serve_refuses_a_public_bind() {
     );
 }
 
+/// "Every interface" is not a private address. A container must ask for it.
+#[test]
+fn serve_refuses_to_bind_every_interface() {
+    for a in ["0.0.0.0", "::"] {
+        let r = run(&["serve", "--bind", a]);
+        assert!(!r.ok, "serve must refuse --bind {a}");
+        assert!(
+            r.err.contains("--allow-public-bind"),
+            "stderr was: {}",
+            r.err
+        );
+    }
+}
+
 #[test]
 fn serve_rejects_a_bind_that_is_not_an_address() {
     let r = run(&["serve", "--bind", "mini.local"]);

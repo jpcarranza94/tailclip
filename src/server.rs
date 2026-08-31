@@ -54,9 +54,8 @@ impl State {
 pub fn is_private(ip: IpAddr) -> bool {
     match ip {
         IpAddr::V4(a) => a.is_loopback() || a.is_private() || a.is_link_local() || is_cgnat(a),
-        IpAddr::V6(a) => {
-            a.is_loopback() || (a.segments()[0] & 0xfe00) == 0xfc00 || a.is_unspecified()
-        }
+        // 0.0.0.0 and :: mean "every interface", so both count as public.
+        IpAddr::V6(a) => a.is_loopback() || (a.segments()[0] & 0xfe00) == 0xfc00,
     }
 }
 
@@ -264,7 +263,14 @@ mod tests {
 
     #[test]
     fn private_rejects_public_addresses() {
-        for a in ["8.8.8.8", "1.1.1.1", "203.0.113.7", "2606:4700::1111"] {
+        for a in [
+            "8.8.8.8",
+            "1.1.1.1",
+            "203.0.113.7",
+            "2606:4700::1111",
+            "0.0.0.0",
+            "::",
+        ] {
             assert!(!is_private(a.parse().unwrap()), "{a} must count as public");
         }
     }
