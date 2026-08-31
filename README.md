@@ -57,6 +57,11 @@ pasteboard, so the two processes do not conflict.
 loop reads the file on each tick. Before you copy a password, run `tailclip
 pause`.
 
+A pause stops both directions, and it drops what happens during the pause. A
+clip that you copy while paused never leaves the machine, not even after the
+resume. A clip that another device sends while you are paused never reaches
+your pasteboard. After the resume, only new clips move.
+
 ## Threat model
 
 Read this before you run tailclip.

@@ -35,7 +35,8 @@ fn serve() -> Serve {
         .expect("start tailclip serve");
     let mut out = BufReader::new(child.stdout.take().expect("the server has stdout"));
     let mut line = String::new();
-    out.read_line(&mut line).expect("the server prints its address");
+    out.read_line(&mut line)
+        .expect("the server prints its address");
     // "tailclip serving on http://127.0.0.1:54321/clip"
     let addr = line
         .trim()
@@ -45,8 +46,15 @@ fn serve() -> Serve {
         .trim_start_matches("http://")
         .trim_end_matches("/clip")
         .to_string();
-    assert!(addr.starts_with("127.0.0.1:"), "unexpected server line: {line}");
-    Serve { child, addr, _out: out }
+    assert!(
+        addr.starts_with("127.0.0.1:"),
+        "unexpected server line: {line}"
+    );
+    Serve {
+        child,
+        addr,
+        _out: out,
+    }
 }
 
 struct Run {
@@ -66,10 +74,19 @@ fn run_with(args: &[&str], stdin: Option<&[u8]>, env: &[(&str, &str)]) -> Run {
     for (k, v) in env {
         cmd.env(k, v);
     }
-    cmd.stdin(if stdin.is_some() { Stdio::piped() } else { Stdio::null() });
+    cmd.stdin(if stdin.is_some() {
+        Stdio::piped()
+    } else {
+        Stdio::null()
+    });
     let mut child = cmd.spawn().expect("start tailclip");
     if let Some(b) = stdin {
-        child.stdin.take().expect("stdin").write_all(b).expect("write stdin");
+        child
+            .stdin
+            .take()
+            .expect("stdin")
+            .write_all(b)
+            .expect("write stdin");
     }
     let o = child.wait_with_output().expect("wait for tailclip");
     Run {
@@ -151,11 +168,27 @@ fn an_identical_clip_does_not_bump_the_version() {
     let url = format!("http://{}/clip", s.addr);
     let a = agent();
 
-    let r = a.post(&url).header("Content-Type", TEXT_MIME).send("same").expect("post");
+    let r = a
+        .post(&url)
+        .header("Content-Type", TEXT_MIME)
+        .send("same")
+        .expect("post");
     assert_eq!(version_of(&r), 1);
-    let r = a.post(&url).header("Content-Type", TEXT_MIME).send("same").expect("post");
-    assert_eq!(version_of(&r), 1, "an identical body must not bump the version");
-    let r = a.post(&url).header("Content-Type", TEXT_MIME).send("other").expect("post");
+    let r = a
+        .post(&url)
+        .header("Content-Type", TEXT_MIME)
+        .send("same")
+        .expect("post");
+    assert_eq!(
+        version_of(&r),
+        1,
+        "an identical body must not bump the version"
+    );
+    let r = a
+        .post(&url)
+        .header("Content-Type", TEXT_MIME)
+        .send("other")
+        .expect("post");
     assert_eq!(version_of(&r), 2, "a changed body must bump the version");
 }
 
@@ -166,9 +199,17 @@ fn the_same_bytes_with_a_new_mime_type_bump_the_version() {
     let a = agent();
     let body = red_dot_png();
 
-    let r = a.post(&url).header("Content-Type", "image/png").send(&body[..]).expect("post");
+    let r = a
+        .post(&url)
+        .header("Content-Type", "image/png")
+        .send(&body[..])
+        .expect("post");
     assert_eq!(version_of(&r), 1);
-    let r = a.post(&url).header("Content-Type", TEXT_MIME).send(&body[..]).expect("post");
+    let r = a
+        .post(&url)
+        .header("Content-Type", TEXT_MIME)
+        .send(&body[..])
+        .expect("post");
     assert_eq!(version_of(&r), 2, "a new mime type must bump the version");
 }
 
@@ -186,7 +227,10 @@ fn the_long_poll_delivers_a_clip_from_another_process() {
     });
 
     let t0 = Instant::now();
-    let mut r = a.get(&format!("{url}?since={start}")).call().expect("long poll");
+    let mut r = a
+        .get(&format!("{url}?since={start}"))
+        .call()
+        .expect("long poll");
     let waited = t0.elapsed();
     writer.join().expect("the writer thread");
 
@@ -196,7 +240,10 @@ fn the_long_poll_delivers_a_clip_from_another_process() {
         r.body_mut().read_to_string().expect("read the body"),
         "delivered by the long poll"
     );
-    assert!(waited >= Duration::from_millis(300), "the poll returned after {waited:?}");
+    assert!(
+        waited >= Duration::from_millis(300),
+        "the poll returned after {waited:?}"
+    );
 }
 
 #[test]
@@ -232,7 +279,11 @@ fn serve_refuses_a_public_bind() {
     let r = run(&["serve", "--bind", "8.8.8.8"]);
     assert!(!r.ok, "serve must not start on a public address");
     assert_eq!(r.code, 1);
-    assert!(r.err.contains("--allow-public-bind"), "stderr was: {}", r.err);
+    assert!(
+        r.err.contains("--allow-public-bind"),
+        "stderr was: {}",
+        r.err
+    );
 }
 
 #[test]
@@ -285,7 +336,12 @@ fn get_and_set_need_a_host() {
 #[test]
 fn the_selftest_passes() {
     let r = run(&["selftest"]);
-    assert!(r.ok, "selftest failed:\n{}\n{}", String::from_utf8_lossy(&r.out), r.err);
+    assert!(
+        r.ok,
+        "selftest failed:\n{}\n{}",
+        String::from_utf8_lossy(&r.out),
+        r.err
+    );
     assert!(String::from_utf8_lossy(&r.out).contains("selftest OK"));
 }
 
@@ -298,19 +354,57 @@ fn the_selftest_passes() {
 fn the_sync_loop_moves_a_clip_to_the_pasteboard() {
     let s = serve();
     let home = tmp_home("sync");
+    let h = home.to_str().unwrap().to_string();
     let mut sync = Command::new(BIN)
         .args(["sync", &s.addr])
-        .env("HOME", home.to_str().unwrap())
+        .env("HOME", &h)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
         .expect("start tailclip sync");
     std::thread::sleep(Duration::from_secs(1));
 
-    let want = format!("sync test {}", std::process::id());
-    assert!(run(&["set", &s.addr, &want]).ok);
-
     let mut cb = arboard::Clipboard::new().expect("open the clipboard");
+    let tag = std::process::id();
+
+    // The pull direction: a remote clip reaches the pasteboard.
+    let want = format!("sync test {tag}");
+    assert!(run(&["set", &s.addr, &want]).ok);
+    assert_eq!(
+        wait_for(&mut cb, &want),
+        want,
+        "the sync loop must apply the remote clip"
+    );
+
+    // A pause stops the pull. The clip sent during the pause never arrives.
+    assert!(run_with(&["pause"], None, &[("HOME", &h)]).ok);
+    std::thread::sleep(Duration::from_millis(700));
+    let hidden = format!("sent while paused {tag}");
+    assert!(run(&["set", &s.addr, &hidden]).ok);
+    std::thread::sleep(Duration::from_secs(3));
+    assert_eq!(
+        cb.get_text().unwrap_or_default(),
+        want,
+        "a paused client must not apply a remote clip"
+    );
+
+    // A resume starts the pull again, and it does not replay the paused clip.
+    assert!(run_with(&["resume"], None, &[("HOME", &h)]).ok);
+    let after = format!("sent after resume {tag}");
+    assert!(run(&["set", &s.addr, &after]).ok);
+    assert_eq!(
+        wait_for(&mut cb, &after),
+        after,
+        "a resumed client must apply a new clip"
+    );
+
+    let _ = sync.kill();
+    let _ = sync.wait();
+    let _ = std::fs::remove_dir_all(&home);
+}
+
+/// Read the clipboard until it holds `want`, or until 10 s pass.
+fn wait_for(cb: &mut arboard::Clipboard, want: &str) -> String {
     let t0 = Instant::now();
     let mut got = String::new();
     while t0.elapsed() < Duration::from_secs(10) {
@@ -320,10 +414,7 @@ fn the_sync_loop_moves_a_clip_to_the_pasteboard() {
         }
         std::thread::sleep(Duration::from_millis(200));
     }
-    let _ = sync.kill();
-    let _ = sync.wait();
-    let _ = std::fs::remove_dir_all(&home);
-    assert_eq!(got, want, "the sync loop must apply the remote clip");
+    got
 }
 
 /// A 1x1 red PNG.

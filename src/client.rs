@@ -81,10 +81,12 @@ pub struct Resp {
 
 /// Turn `HOST` or `HOST:PORT` into the clip URL.
 pub fn clip_url(host: &str) -> String {
-    let host = host.trim_start_matches("http://");
-    let host = host.trim_end_matches('/');
-    let host = host.strip_suffix("/clip").unwrap_or(host);
-    if host.rsplit(':').next().and_then(|p| p.parse::<u16>().ok()).is_some() {
+    if host
+        .rsplit(':')
+        .next()
+        .and_then(|p| p.parse::<u16>().ok())
+        .is_some()
+    {
         format!("http://{host}/clip")
     } else {
         format!("http://{host}:{DEFAULT_PORT}/clip")
@@ -102,9 +104,14 @@ fn agent(timeout: Duration) -> ureq::Agent {
 fn read_resp(r: ureq::http::Response<ureq::Body>) -> Result<Resp, String> {
     let status = r.status().as_u16();
     let head = |k: &str| -> Option<String> {
-        r.headers().get(k).and_then(|v| v.to_str().ok()).map(str::to_string)
+        r.headers()
+            .get(k)
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_string)
     };
-    let version = head("X-Clip-Version").and_then(|v| v.parse().ok()).unwrap_or(0);
+    let version = head("X-Clip-Version")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
     let mime = head("Content-Type").unwrap_or_else(|| TEXT_MIME.to_string());
     let mut r = r;
     let body = r
@@ -113,7 +120,12 @@ fn read_resp(r: ureq::http::Response<ureq::Body>) -> Result<Resp, String> {
         .limit(MAX_BODY as u64)
         .read_to_vec()
         .map_err(|e| e.to_string())?;
-    Ok(Resp { status, version, mime, body })
+    Ok(Resp {
+        status,
+        version,
+        mime,
+        body,
+    })
 }
 
 /// `GET /clip`. If `since` is present, the server blocks until the version passes it.
@@ -122,7 +134,10 @@ pub fn fetch(url: &str, since: Option<u64>, timeout: Duration) -> Result<Resp, S
         Some(v) => format!("{url}?since={v}"),
         None => url.to_string(),
     };
-    let r = agent(timeout).get(&full).call().map_err(|e| e.to_string())?;
+    let r = agent(timeout)
+        .get(&full)
+        .call()
+        .map_err(|e| e.to_string())?;
     read_resp(r)
 }
 
@@ -164,7 +179,10 @@ pub fn decode_png(bytes: &[u8]) -> Result<(usize, usize, Vec<u8>), String> {
     let mut buf = vec![0u8; reader.output_buffer_size().ok_or("the PNG is too large")?];
     let info = reader.next_frame(&mut buf).map_err(|e| e.to_string())?;
     if info.color_type != png::ColorType::Rgba || info.bit_depth != png::BitDepth::Eight {
-        return Err(format!("unsupported PNG: {:?} {:?}", info.color_type, info.bit_depth));
+        return Err(format!(
+            "unsupported PNG: {:?} {:?}",
+            info.color_type, info.bit_depth
+        ));
     }
     buf.truncate(info.buffer_size());
     Ok((info.width as usize, info.height as usize, buf))
@@ -203,7 +221,11 @@ fn read_image(cb: &mut arboard::Clipboard) -> Option<Vec<u8>> {
 #[cfg(not(target_os = "macos"))]
 fn write_image(cb: &mut arboard::Clipboard, png_bytes: &[u8]) -> Result<(), String> {
     let (width, height, rgba) = decode_png(png_bytes)?;
-    let img = arboard::ImageData { width, height, bytes: rgba.into() };
+    let img = arboard::ImageData {
+        width,
+        height,
+        bytes: rgba.into(),
+    };
     cb.set_image(img).map_err(|e| e.to_string())
 }
 
@@ -334,7 +356,9 @@ pub fn resume() -> Result<(), String> {
 pub fn get(host: &str) -> Result<(), String> {
     let r = fetch(&clip_url(host), None, Duration::from_secs(10))?;
     use std::io::Write;
-    std::io::stdout().write_all(&r.body).map_err(|e| e.to_string())
+    std::io::stdout()
+        .write_all(&r.body)
+        .map_err(|e| e.to_string())
 }
 
 /// Push text from the argument, or bytes from stdin.
@@ -343,13 +367,22 @@ pub fn set(host: &str, text: Option<&str>) -> Result<(), String> {
         Some(t) => (TEXT_MIME.to_string(), t.as_bytes().to_vec()),
         None => {
             let mut b = Vec::new();
-            std::io::stdin().read_to_end(&mut b).map_err(|e| e.to_string())?;
-            let m = if looks_like_png(&b) { PNG_MIME } else { TEXT_MIME };
+            std::io::stdin()
+                .read_to_end(&mut b)
+                .map_err(|e| e.to_string())?;
+            let m = if looks_like_png(&b) {
+                PNG_MIME
+            } else {
+                TEXT_MIME
+            };
             (m.to_string(), b)
         }
     };
     if body.len() > MAX_BODY {
-        return Err(format!("clip is {} bytes. The cap is {MAX_BODY} bytes.", body.len()));
+        return Err(format!(
+            "clip is {} bytes. The cap is {MAX_BODY} bytes.",
+            body.len()
+        ));
     }
     let r = push(&clip_url(host), &mime, &body, Duration::from_secs(30))?;
     if r.status == 413 {
@@ -368,28 +401,24 @@ pub fn sync(host: &str) -> Result<(), String> {
 
     println!("tailclip sync with {url}");
 
-    let poller = {
-        let url = url.clone();
-        let watcher = watcher.clone();
-        thread::spawn(move || poll_loop(&url, watcher))
-    };
+    let poll_url = url.clone();
+    let poll_watcher = watcher.clone();
+    thread::spawn(move || poll_loop(&poll_url, poll_watcher));
     watch_loop(&url, watcher, cb);
-    let _ = poller.join();
     Ok(())
 }
 
 fn watch_loop(url: &str, watcher: Arc<Mutex<Watcher>>, mut cb: arboard::Clipboard) {
     loop {
         thread::sleep(WATCH_TICK);
-        if is_paused() {
-            continue;
-        }
+        // Read the pasteboard even when paused. The read moves the change
+        // token, so a clip copied during a pause never gets pushed later.
         let local = {
             let mut w = watcher.lock().unwrap();
             w.poll(&mut cb)
         };
         let Some(p) = local else { continue };
-        if p.is_empty() || p.bytes().len() > MAX_BODY {
+        if is_paused() || p.is_empty() || p.bytes().len() > MAX_BODY {
             continue;
         }
         if let Err(e) = push(url, p.mime(), p.bytes(), Duration::from_secs(30)) {
@@ -418,10 +447,6 @@ fn poll_loop(url: &str, watcher: Arc<Mutex<Watcher>>) {
         }
     };
     loop {
-        if is_paused() {
-            thread::sleep(RETRY_WAIT);
-            continue;
-        }
         let r = match fetch(url, Some(seen), POLL_TIMEOUT + Duration::from_secs(15)) {
             Ok(r) => r,
             Err(_) => {
@@ -429,8 +454,11 @@ fn poll_loop(url: &str, watcher: Arc<Mutex<Watcher>>) {
                 continue;
             }
         };
+        // The long poll blocks for up to 300 s, so the pause file can appear
+        // while this thread waits. Check it here, not before the poll. The
+        // version still moves, so a resume does not apply an old clip.
         seen = r.version;
-        if r.status != 200 || r.body.is_empty() {
+        if is_paused() || r.status != 200 || r.body.is_empty() {
             continue;
         }
         let p = Payload::from_wire(&r.mime, r.body);
@@ -459,19 +487,19 @@ mod tests {
     }
 
     #[test]
-    fn url_accepts_a_full_address() {
-        assert_eq!(clip_url("http://mini.local:9000/clip"), "http://mini.local:9000/clip");
-    }
-
-    #[test]
     fn png_signature_check() {
-        assert!(looks_like_png(&[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a, 0]));
+        assert!(looks_like_png(&[
+            0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a, 0
+        ]));
         assert!(!looks_like_png(b"hello"));
     }
 
     #[test]
     fn wire_mime_picks_the_payload_kind() {
-        assert_eq!(Payload::from_wire(TEXT_MIME, b"hi".to_vec()), Payload::Text("hi".into()));
+        assert_eq!(
+            Payload::from_wire(TEXT_MIME, b"hi".to_vec()),
+            Payload::Text("hi".into())
+        );
         match Payload::from_wire(PNG_MIME, vec![1, 2, 3]) {
             Payload::Png(b) => assert_eq!(b, vec![1, 2, 3]),
             other => panic!("expected a PNG, got {other:?}"),

@@ -4,7 +4,6 @@
 
 use std::io::Read;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -17,17 +16,6 @@ pub const MAX_BODY: usize = 32 * 1024 * 1024;
 
 /// How long a `GET /clip?since=<v>` blocks before it returns 204.
 pub const POLL_TIMEOUT: Duration = Duration::from_secs(300);
-
-/// The live long poll timeout, in milliseconds. Only `selftest` changes it.
-static POLL_MS: AtomicU64 = AtomicU64::new(300_000);
-
-pub fn poll_timeout() -> Duration {
-    Duration::from_millis(POLL_MS.load(Ordering::Relaxed))
-}
-
-pub fn set_poll_timeout(d: Duration) {
-    POLL_MS.store(d.as_millis() as u64, Ordering::Relaxed);
-}
 
 pub const DEFAULT_PORT: u16 = 8757;
 
@@ -42,10 +30,12 @@ pub struct Clip {
 pub struct State {
     clip: Mutex<Clip>,
     changed: Condvar,
+    /// `selftest` builds a state with a short timeout, so the 204 check is fast.
+    poll_timeout: Duration,
 }
 
 impl State {
-    pub fn new() -> State {
+    pub fn new(poll_timeout: Duration) -> State {
         State {
             clip: Mutex::new(Clip {
                 version: 0,
@@ -53,13 +43,8 @@ impl State {
                 mime: TEXT_MIME.to_string(),
             }),
             changed: Condvar::new(),
+            poll_timeout,
         }
-    }
-}
-
-impl Default for State {
-    fn default() -> State {
-        State::new()
     }
 }
 
@@ -68,9 +53,7 @@ impl Default for State {
 /// True if the address is loopback, RFC1918, `100.64.0.0/10`, or IPv6 `fc00::/7`.
 pub fn is_private(ip: IpAddr) -> bool {
     match ip {
-        IpAddr::V4(a) => {
-            a.is_loopback() || a.is_private() || a.is_link_local() || is_cgnat(a)
-        }
+        IpAddr::V4(a) => a.is_loopback() || a.is_private() || a.is_link_local() || is_cgnat(a),
         IpAddr::V6(a) => {
             a.is_loopback() || (a.segments()[0] & 0xfe00) == 0xfc00 || a.is_unspecified()
         }
@@ -127,8 +110,7 @@ pub fn pick_bind(explicit: Option<&str>, allow_public: bool) -> Result<IpAddr, S
 
 /// Listen on `addr` and serve until the process stops.
 pub fn run(addr: SocketAddr) -> Result<(), String> {
-    let state = Arc::new(State::new());
-    run_with(addr, state)
+    run_with(addr, Arc::new(State::new(POLL_TIMEOUT)))
 }
 
 pub fn run_with(addr: SocketAddr, state: Arc<State>) -> Result<(), String> {
@@ -152,8 +134,9 @@ fn version_header(v: u64) -> Header {
 }
 
 fn type_header(mime: &str) -> Header {
-    Header::from_bytes(&b"Content-Type"[..], mime.as_bytes())
-        .unwrap_or_else(|_| Header::from_bytes(&b"Content-Type"[..], &b"application/octet-stream"[..]).unwrap())
+    Header::from_bytes(&b"Content-Type"[..], mime.as_bytes()).unwrap_or_else(|_| {
+        Header::from_bytes(&b"Content-Type"[..], &b"application/octet-stream"[..]).unwrap()
+    })
 }
 
 fn since_of(url: &str) -> Option<u64> {
@@ -185,7 +168,7 @@ fn handle(req: Request, st: &State) {
 fn get_clip(req: Request, st: &State, since: Option<u64>) {
     let mut clip = st.clip.lock().unwrap();
     if let Some(s) = since {
-        let deadline = Instant::now() + poll_timeout();
+        let deadline = Instant::now() + st.poll_timeout;
         while clip.version <= s {
             let left = deadline.saturating_duration_since(Instant::now());
             if left.is_zero() {
@@ -211,6 +194,9 @@ fn post_clip(mut req: Request, st: &State) {
         .find(|h| h.field.equiv("Content-Type"))
         .map(|h| h.value.as_str().to_string())
         .unwrap_or_else(|| TEXT_MIME.to_string());
+    // This value goes back out in a response header, so drop anything that
+    // could split the response.
+    let mime: String = mime.chars().filter(|c| !c.is_control()).take(128).collect();
 
     // ponytail: read twice the cap, then reject. This keeps the 413 reply on
     // the same connection, so the client reads a status and not a broken pipe.
@@ -259,7 +245,15 @@ mod tests {
 
     #[test]
     fn private_accepts_the_safe_ranges() {
-        for a in ["127.0.0.1", "10.0.0.5", "172.16.9.9", "192.168.1.10", "100.110.80.23", "::1", "fd00::1"] {
+        for a in [
+            "127.0.0.1",
+            "10.0.0.5",
+            "172.16.9.9",
+            "192.168.1.10",
+            "100.110.80.23",
+            "::1",
+            "fd00::1",
+        ] {
             assert!(is_private(a.parse().unwrap()), "{a} must count as private");
         }
     }
@@ -277,13 +271,19 @@ mod tests {
         assert!(pick_bind(Some("127.0.0.1"), false).is_ok());
         assert!(pick_bind(Some("8.8.8.8"), false).is_err());
         assert!(pick_bind(Some("8.8.8.8"), true).is_ok());
-        assert!(pick_bind(Some("mini.local"), false).is_err(), "a name is not an address");
+        assert!(
+            pick_bind(Some("mini.local"), false).is_err(),
+            "a name is not an address"
+        );
     }
 
     #[test]
     fn pick_bind_names_tailscale_in_the_error() {
         let msg = pick_bind(Some("8.8.8.8"), false).unwrap_err();
-        assert!(msg.contains("--allow-public-bind"), "the error must name the override");
+        assert!(
+            msg.contains("--allow-public-bind"),
+            "the error must name the override"
+        );
     }
 
     #[test]
@@ -297,7 +297,7 @@ mod tests {
 
     #[test]
     fn a_new_state_starts_empty_at_version_zero() {
-        let c = State::new().clip.into_inner().unwrap();
+        let c = State::new(POLL_TIMEOUT).clip.into_inner().unwrap();
         assert_eq!(c.version, 0);
         assert!(c.body.is_empty());
         assert_eq!(c.mime, TEXT_MIME);
@@ -306,6 +306,19 @@ mod tests {
     #[test]
     fn the_poll_timeout_is_five_minutes_by_default() {
         assert_eq!(POLL_TIMEOUT, Duration::from_secs(300));
+        assert_eq!(State::new(POLL_TIMEOUT).poll_timeout, POLL_TIMEOUT);
+    }
+
+    #[test]
+    fn a_control_character_cannot_escape_the_mime_header() {
+        let dirty = "text/plain\r\nX-Evil: 1";
+        let clean: String = dirty
+            .chars()
+            .filter(|c| !c.is_control())
+            .take(128)
+            .collect();
+        assert_eq!(clean, "text/plainX-Evil: 1");
+        assert!(Header::from_bytes(&b"Content-Type"[..], clean.as_bytes()).is_ok());
     }
 
     #[test]
