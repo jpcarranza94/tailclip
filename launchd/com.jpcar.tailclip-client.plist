@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  tailclip sync, as a LaunchAgent.
+
+  This must be an agent, not a daemon. Only an agent in the GUI session can
+  read the pasteboard.
+
+  Install:
+    sed -i '' 's/MINI-TAILSCALE-IP/100.110.80.23/' com.jpcar.tailclip-client.plist
+    cp com.jpcar.tailclip-client.plist ~/Library/LaunchAgents/
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.jpcar.tailclip-client.plist
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.jpcar.tailclip-client</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/tailclip</string>
+    <string>sync</string>
+    <string>MINI-TAILSCALE-IP:8757</string>
+  </array>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/tailclip-client.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/tailclip-client.log</string>
+</dict>
+</plist>

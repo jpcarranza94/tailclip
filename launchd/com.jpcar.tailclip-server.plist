@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  tailclip serve, as a LaunchDaemon.
+
+  Install:
+    sudo cp com.jpcar.tailclip-server.plist /Library/LaunchDaemons/
+    sudo launchctl bootstrap system /Library/LaunchDaemons/com.jpcar.tailclip-server.plist
+
+  With no --bind, tailclip finds the Tailscale address itself. If Tailscale is
+  not up yet, the process exits and launchd starts it again after 10 s.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.jpcar.tailclip-server</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/tailclip</string>
+    <string>serve</string>
+  </array>
+
+  <!-- The server holds one clip in RAM and writes nothing. It needs no root. -->
+  <key>UserName</key>
+  <string>nobody</string>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+
+  <key>StandardOutPath</key>
+  <string>/var/log/tailclip-server.log</string>
+  <key>StandardErrorPath</key>
+  <string>/var/log/tailclip-server.log</string>
+</dict>
+</plist>
