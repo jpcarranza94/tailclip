@@ -239,6 +239,21 @@ fn selftest() -> Result<(), String> {
         check!(r.body != too_big, "10b the oversize clip was not stored");
     }
 
+    // 12. A since above the current version returns at once, not after a wait.
+    {
+        let now = fetch(&url, None, short)?.version;
+        let t0 = Instant::now();
+        let r = fetch(&url, Some(now + 500), short)?;
+        check!(
+            r.status == 200 && t0.elapsed() < Duration::from_secs(1),
+            "12 a since above the version returns at once, after a server restart"
+        );
+        check!(
+            r.version == now,
+            "12b it carries the real version, so the client resets"
+        );
+    }
+
     // 11. The bind address rules.
     check!(
         is_private("100.110.80.23".parse::<IpAddr>().unwrap()),

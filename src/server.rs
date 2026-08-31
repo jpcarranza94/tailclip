@@ -169,7 +169,11 @@ fn get_clip(req: Request, st: &State, since: Option<u64>) {
     let mut clip = st.clip.lock().unwrap();
     if let Some(s) = since {
         let deadline = Instant::now() + st.poll_timeout;
-        while clip.version <= s {
+        // Block only while the client is level with the server. A client that
+        // asks for a version above the current one saw an older process: the
+        // server restarted and lost its RAM. Answer that client at once, or it
+        // waits for the version to climb back and stays deaf until it does.
+        while clip.version == s {
             let left = deadline.saturating_duration_since(Instant::now());
             if left.is_zero() {
                 let v = clip.version;

@@ -264,6 +264,53 @@ fn a_clip_larger_than_the_cap_is_rejected() {
     assert!(r.body_mut().read_to_vec().expect("body").is_empty());
 }
 
+/// After a restart the server holds version 0, but a client still asks for the
+/// version it saw before. The server must answer at once, not block.
+#[test]
+fn a_since_above_the_version_returns_at_once() {
+    let s = serve();
+    let url = format!("http://{}/clip", s.addr);
+    let a = agent();
+    a.post(&url)
+        .header("Content-Type", TEXT_MIME)
+        .send("one")
+        .expect("post");
+
+    let t0 = Instant::now();
+    let mut r = a.get(&format!("{url}?since=9999")).call().expect("poll");
+    assert!(
+        t0.elapsed() < Duration::from_secs(2),
+        "the poll blocked for {:?}",
+        t0.elapsed()
+    );
+    assert_eq!(r.status().as_u16(), 200);
+    assert_eq!(version_of(&r), 1, "the reply carries the real version");
+    assert_eq!(r.body_mut().read_to_string().expect("body"), "one");
+}
+
+#[test]
+fn a_since_below_the_version_returns_at_once() {
+    let s = serve();
+    let url = format!("http://{}/clip", s.addr);
+    let a = agent();
+    a.post(&url)
+        .header("Content-Type", TEXT_MIME)
+        .send("one")
+        .expect("post");
+    a.post(&url)
+        .header("Content-Type", TEXT_MIME)
+        .send("two")
+        .expect("post");
+
+    let t0 = Instant::now();
+    let r = a.get(&format!("{url}?since=1")).call().expect("poll");
+    assert!(
+        t0.elapsed() < Duration::from_secs(2),
+        "a client behind must not wait"
+    );
+    assert_eq!(version_of(&r), 2);
+}
+
 #[test]
 fn an_unknown_path_is_not_found() {
     let s = serve();
