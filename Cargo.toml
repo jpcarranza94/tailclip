@@ -1,0 +1,34 @@
+[package]
+name = "tailclip"
+version = "1.0.0"
+edition = "2021"
+rust-version = "1.75"
+license = "MIT OR Apache-2.0"
+description = "Shared clipboard for a tailnet. The tailnet is the authentication."
+repository = "https://github.com/jpcarranza94/tailclip"
+readme = "README.md"
+keywords = ["clipboard", "tailscale", "tailnet", "sync", "cli"]
+categories = ["command-line-utilities"]
+exclude = ["launchd/"]
+
+[dependencies]
+tiny_http = "0.12"
+ureq = { version = "3", default-features = false }
+png = "0.18"
+if-addrs = "0.15"
+
+# macOS: NSPasteboard holds PNG data itself, so arboard only needs to do text.
+# This keeps the "image" crate and its dozen unused decoders out of the tree.
+[target.'cfg(target_os = "macos")'.dependencies]
+arboard = { version = "3", default-features = false }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSPasteboard"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSData"] }
+
+# Linux: arboard does the image work. Its "image" dependency here is png only.
+[target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
+arboard = { version = "3", default-features = false, features = ["image-data", "wayland-data-control"] }
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true
