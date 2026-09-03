@@ -239,7 +239,7 @@ mod tests {
         let cg = |s: &str| is_cgnat(s.parse().unwrap());
         assert!(!cg("100.63.255.255"), "just below the range");
         assert!(cg("100.64.0.0"), "the first address of the range");
-        assert!(cg("100.110.80.23"), "a real Tailscale address");
+        assert!(cg("100.64.0.10"), "a real Tailscale address");
         assert!(cg("100.127.255.255"), "the last address of the range");
         assert!(!cg("100.128.0.0"), "just above the range");
         assert!(!cg("99.64.0.1"), "the wrong first octet");
@@ -253,7 +253,7 @@ mod tests {
             "10.0.0.5",
             "172.16.9.9",
             "192.168.1.10",
-            "100.110.80.23",
+            "100.64.0.10",
             "::1",
             "fd00::1",
         ] {
@@ -277,7 +277,7 @@ mod tests {
 
     #[test]
     fn pick_bind_follows_the_rules() {
-        assert!(pick_bind(Some("100.110.80.23"), false).is_ok());
+        assert!(pick_bind(Some("100.64.0.10"), false).is_ok());
         assert!(pick_bind(Some("127.0.0.1"), false).is_ok());
         assert!(pick_bind(Some("8.8.8.8"), false).is_err());
         assert!(pick_bind(Some("8.8.8.8"), true).is_ok());

@@ -241,11 +241,11 @@ fn selftest() -> Result<(), String> {
 
     // 11. The bind address rules.
     check!(
-        is_private("100.110.80.23".parse::<IpAddr>().unwrap()),
-        "11 the rules accept the Tailscale address 100.110.80.23"
+        is_private("100.64.0.10".parse::<IpAddr>().unwrap()),
+        "11 the rules accept the Tailscale address 100.64.0.10"
     );
     check!(
-        pick_bind(Some("100.110.80.23"), false).is_ok(),
+        pick_bind(Some("100.64.0.10"), false).is_ok(),
         "11b --bind accepts a tailnet address"
     );
     check!(

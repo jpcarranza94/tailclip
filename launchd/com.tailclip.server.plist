@@ -5,8 +5,8 @@
   tailclip serve, as a LaunchDaemon.
 
   Install:
-    sudo cp com.jpcar.tailclip-server.plist /Library/LaunchDaemons/
-    sudo launchctl bootstrap system /Library/LaunchDaemons/com.jpcar.tailclip-server.plist
+    sudo cp com.tailclip.server.plist /Library/LaunchDaemons/
+    sudo launchctl bootstrap system /Library/LaunchDaemons/com.tailclip.server.plist
 
   With no --bind, tailclip finds the Tailscale address itself. If Tailscale is
   not up yet, the process exits and launchd starts it again after 10 s.
@@ -14,7 +14,7 @@
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.jpcar.tailclip-server</string>
+  <string>com.tailclip.server</string>
 
   <key>ProgramArguments</key>
   <array>
