@@ -8,14 +8,14 @@
   read the pasteboard.
 
   Install:
-    sed -i '' 's/MINI-TAILSCALE-IP/100.110.80.23/' com.jpcar.tailclip-client.plist
-    cp com.jpcar.tailclip-client.plist ~/Library/LaunchAgents/
-    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.jpcar.tailclip-client.plist
+    sed -i '' 's/MINI-TAILSCALE-IP/100.64.0.10/' com.tailclip.client.plist
+    cp com.tailclip.client.plist ~/Library/LaunchAgents/
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.tailclip.client.plist
 -->
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.jpcar.tailclip-client</string>
+  <string>com.tailclip.client</string>
 
   <key>ProgramArguments</key>
   <array>

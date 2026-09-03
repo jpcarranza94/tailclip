@@ -1,5 +1,8 @@
 # tailclip
 
+[![ci](https://github.com/jpcarranza94/tailclip/actions/workflows/ci.yml/badge.svg)](https://github.com/jpcarranza94/tailclip/actions/workflows/ci.yml)
+[![license](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue)](#license)
+
 A shared clipboard for a tailnet. Copy on one machine. Paste on another.
 
 The tailnet is the authentication. Tailscale already authenticates every device
@@ -12,7 +15,15 @@ Text and images. One clip in RAM. No disk. About 30 crates.
 
 You must have Tailscale on both machines first.
 
-1. Install Rust, then build the binary:
+1. Install the binary. Take a prebuilt one from the releases page:
+
+       # macOS arm64. Pick the archive that matches your machine.
+       curl -fsSL -o tailclip.tar.gz \
+         https://github.com/jpcarranza94/tailclip/releases/latest/download/tailclip-aarch64-apple-darwin.tar.gz
+       tar -xzf tailclip.tar.gz
+       sudo mv tailclip /usr/local/bin/
+
+   Or build it from source with Rust 1.75 or later:
 
        git clone https://github.com/jpcarranza94/tailclip
        cd tailclip
@@ -34,7 +45,7 @@ You must have Tailscale on both machines first.
 4. Start the client on every other machine. Use the Tailscale address of the
    server:
 
-       tailclip sync 100.110.80.23:8757
+       tailclip sync 100.64.0.10:8757
 
 5. Copy some text on one machine. Paste it on another machine.
 
@@ -111,8 +122,8 @@ version starts at 0 with an empty clip.
 
 You can drive the whole protocol with `curl`:
 
-    curl -s http://100.110.80.23:8757/clip
-    curl -s -X POST --data-binary 'hello' http://100.110.80.23:8757/clip
+    curl -s http://100.64.0.10:8757/clip
+    curl -s -X POST --data-binary 'hello' http://100.64.0.10:8757/clip
 
 ## Platforms
 
@@ -144,21 +155,26 @@ The `launchd` directory holds two templates.
 
 1. Install the server as a LaunchDaemon:
 
-       sudo cp launchd/com.jpcar.tailclip-server.plist /Library/LaunchDaemons/
-       sudo launchctl bootstrap system /Library/LaunchDaemons/com.jpcar.tailclip-server.plist
+       sudo cp launchd/com.tailclip.server.plist /Library/LaunchDaemons/
+       sudo launchctl bootstrap system /Library/LaunchDaemons/com.tailclip.server.plist
 
 2. Set the address of the server in the client template. Replace
-   `MINI-TAILSCALE-IP` with the Tailscale address of the server:
+   `SERVER-TAILSCALE-IP` with the Tailscale address of the server:
 
-       sed -i '' 's/MINI-TAILSCALE-IP/100.110.80.23/' launchd/com.jpcar.tailclip-client.plist
+       sed -i '' 's/SERVER-TAILSCALE-IP/100.64.0.10/' launchd/com.tailclip.client.plist
 
 3. Install the client as a LaunchAgent:
 
-       cp launchd/com.jpcar.tailclip-client.plist ~/Library/LaunchAgents/
-       launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.jpcar.tailclip-client.plist
+       cp launchd/com.tailclip.client.plist ~/Library/LaunchAgents/
+       launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.tailclip.client.plist
 
 The client must be a LaunchAgent, not a LaunchDaemon. Only an agent in the GUI
 session can read the pasteboard.
+
+The server has no such limit, because it never touches a pasteboard. A
+LaunchDaemon is the better choice, because it starts before any user logs in. If
+the server host logs in automatically, a LaunchAgent also works. Put the same
+plist in `~/Library/LaunchAgents/` and bootstrap it into `gui/$(id -u)` instead.
 
 If Tailscale is not up yet, the server exits and `launchd` starts it again after
 10 s.

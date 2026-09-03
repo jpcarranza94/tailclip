@@ -478,7 +478,7 @@ mod tests {
 
     #[test]
     fn url_gets_the_default_port() {
-        assert_eq!(clip_url("100.110.80.23"), "http://100.110.80.23:8757/clip");
+        assert_eq!(clip_url("100.64.0.10"), "http://100.64.0.10:8757/clip");
     }
 
     #[test]
